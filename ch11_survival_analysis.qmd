@@ -297,6 +297,100 @@ fit.new |>
 
 ```
 
+## Lung
+
+
+
+```{r}
+library(ggsurvfit)
+
+lung <- lung |> 
+  mutate(
+    status = recode(status, `1` = 0, `2` = 1) 
+  ) |> 
+  as_tibble()
+
+lung
+```
+
+Kaplan-Meier
+
+```{r}
+survfit(Surv(time, status) ~ 1, data = lung) |> 
+  ggsurvfit() +
+  add_confidence_interval() +
+  theme_grey(base_size = 16) +
+  add_risktable()
+```
+
+
+Estimate 1 year survival
+
+```{r}
+summary(survfit(Surv(time, status) ~ 1, data = lung), times=365.1)
+```
+
+Comparing between groups
+
+```{r}
+
+survdiff(Surv(time, status) ~ sex, data = lung)
+
+```
+
+```{r}
+coxph(Surv(time, status) ~ sex, data = lung)
+```
+
+
+```{r}
+
+data(BMT, package = 'SemiCompRisks')
+
+BMT <- BMT |> as_tibble()
+
+
+lm_dat <- BMT |> filter(T1 >= 90)
+
+
+lm_dat <- lm_dat |> mutate(lm_T1 = T1 - 90)
+
+
+survfit2(Surv(lm_T1, delta1) ~ deltaA, data=lm_dat) |> 
+  ggsurvfit() +
+  add_risktable() 
+
+
+coxph(
+  Surv(T1, delta1) ~ deltaA, 
+  subset = T1 >= 90, 
+  data = BMT
+  )
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
