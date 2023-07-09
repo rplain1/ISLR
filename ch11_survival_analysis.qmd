@@ -2,15 +2,16 @@
 title: "Untitled"
 format: html
 editor: visual
+execute: 
+  warning: false
 ---
 
 
 
 ```{r}
 library(tidyverse)
-
 library(censored)
-
+library(survival)
 
 ```
 
@@ -23,35 +24,24 @@ bc <- ISLR2::BrainCancer |>
 ```
 
 Data:
-- **status**: 0 alive, 1 dead
-- **gtv**: gross turmor volume (cubic cm)
-- **sex**: male or female 
-- **diagnosis**: meningioma LG glioma, HG glioma, or other 
-- **loc**: tumor location infratentorial or supratentorial 
-- **ki**: Karnofsky index 
-- **stereo**: stereotactic method; either stereotactic radiosurgery or fractionated stereotactic radiotherapy, abbreviated as SRS and SRT, respectively
+- **status**: 0 alive, 1 dead  
+- **gtv**: gross turmor volume (cubic cm)   
+- **sex**: male or female  
+- **diagnosis**: meningioma LG glioma, HG glioma, or other   
+- **loc**: tumor location infratentorial or supratentorial  
+- **ki**: Karnofsky index  
+- **stereo**: stereotactic method; either stereotactic radiosurgery or fractionated stereotactic radiotherapy, abbreviated as SRS and SRT, respectively  
 
 
 53 of 88 patients were still alive at the end. 
 
 ```{r}
-bc |> 
-  count(status) |> 
-  mutate(total = sum(n),
-         perc = n / total)
-
-```
-
-
-
-```{r}
 table(bc$sex, bc$status)
 ```
 
-Sex did not show statistical significance in difference with p=0.2
+Sex did not show statistical significance in difference with $p = 0.2$
 
 ```{r}
-library(survival)
 
 fit.surv <- survfit(Surv(time, status) ~ 1, data=bc)
 plot(fit.surv, xlab='months', ylab='Est. prob of survival')
@@ -111,7 +101,6 @@ pub <- ISLR2::Publication |> as_tibble()
 fit.posres <- survfit(
   Surv(time, status) ~ posres, data = pub
 )
-fit.posres$surv
 
 fit.pub <- coxph(Surv(time, status) ~ posres, data = pub)
 fit.pub
@@ -145,49 +134,96 @@ plot(y)
 
 
 ```
-Applied
-exercise 10
+
+### Applied Exercises
+
+$\delta$ 1 = true survival time, 0 = censored
+$y$ time
+$c$ censored time
+$t$ survival time
+
  
 ```{r}
 
-res <- survfit(Surv(time, status) ~ 1# sex + diagnosis + loc + ki + gtv + stereo
+res <- survfit(Surv(time, status) ~ 1
                , data=bc)
 plot(res)
 ```
  
+```{r}
+
+sample88 <- bc[, c('time', 'status')] |> sample_n(88, replace = TRUE)
+sample200 <- bc[, c('time', 'status')] |> sample_n(200, replace = TRUE)
+
+plot(res, col = 2)
+lines(survfit(Surv(time, status) ~ 1, data = sample88), col = 3)
+lines(survfit(Surv(time, status) ~ 1, data = sample200), col = 4)
+legend("bottomleft", c('base', 'bootstrap_88', 'bootstrap_200'), col=2:5, lty = 1)
+
+res88 <- survfit(Surv(time, status) ~ 1, data = sample88)
+res200 <- survfit(Surv(time, status) ~ 1, data = sample200)
+
+```
+ 
+The Kaplan-Meier survival curve changes relative to the dataset:  
+
+- Bootstrap $n=88$ leads to similar variance as before, only with slightly higher survival rates. This could be due to the random sampling receiving more censored data points or observations that survived longer.   
+- Bootstrap $n=200$ had the similar survival line, with a much tighter distribution. This is a by-product of bootstrap sampling to increase the size of the data, but with the overall same characteristics.  
+ 
+## Fit Cox PH
+
+```{r}
+fit.all <- coxph(
+  Surv(time, status) ~ 
+    sex 
+  + diagnosis
+  + loc
+  + ki 
+  + gtv
+  + stereo
+  , data = bc
+    )
+
+fit.all
+
+```
+
+The predictors HG glioma of diagnosis and ki being significant. Having a diagnosis of HG glioma corresponds to a multiplier of $exp(2.15) = 8.6$ in the instantaneous chance of dying. 
+
+A one-unit increase in the Karnofsky index (ki) corresponds to a multiplier of $exp(-0.05) = 0.95$ in the instantaneous chance of dying. 
+ 
+Predictors such as sex, loc, and stereo were not significant. 
+ 
+ 
+```{r}
+fit.all2 <- coxph(
+  Surv(time, status) ~ diagnosis + ki + gtv, data = bc
+)
+
+fit.all2
+```
+ 
+```{r}
+bc2 <- bc |> mutate(ki = ifelse(ki == 40, 60, ki))
+modaldata2 <- data.frame(
+  diagnosis = rep("Meningioma", 5),
+  sex = rep("Female", 5),
+  loc = rep("Supratentorial", 5),
+  ki = unique(bc2$ki),
+  gtv = rep(mean(bc2$gtv), 5),
+  stereo = rep("SRT", 5)
+)
+
+
+survplots <- survfit(fit.all, newdata = modaldata2)
+
+plot(survplots, col=2:6)
+legend("bottomleft", levels(bc$diagnosis), col=2:6, lty = 1)
+```
  
  
  
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
+# Practice on Dolphin Data
  
  
 
@@ -206,12 +242,6 @@ df |>
   theme_grey(base_size = 18)
 
 
-df |> 
-  count(age, event) |> 
-  ggplot(aes(age, n)) +
-  geom_col() +
-  facet_wrap(~event, ncol = 1)
-
 ```
 
 
@@ -223,14 +253,47 @@ res.cox <- coxph(
   Surv(age, event) ~ species 
   #+ sex 
   + transfers 
-  + born_in_captivity
+  + strata(born_in_captivity)
   , data = df
   )
 
-test.ph <- cox.zph(res.cox)
-test.ph
+
+res.cox <- coxph(
+  Surv(age, event) ~ species 
+  #+ sex 
+  + transfers 
+  + born_in_captivity
+  , data = df
+  )
+res.cox |> 
+  broom::tidy()
 
 
+df_pred <- df |> 
+  count(species) |> 
+  mutate(transfers = mean(df$transfers),
+         born_in_captivity = mean(df$born_in_captivity))
+
+
+fit.new <- survfit(res.cox, newdata = df_pred)
+
+plot(fit.new, col = 2:21)
+legend("topright", levels(df_pred$species), col=2:21, legend = df_pred$species, lty = 1)
+
+fit.new |> 
+  broom::tidy() |> 
+  select(time, starts_with('estimate')) |> 
+  pivot_longer(cols = starts_with('estimate')) |> 
+  left_join(
+    df_pred |> 
+      mutate(rn = row_number(), 
+             name = paste0('estimate.', rn)) |> 
+      select(name, species)
+  ) |> 
+  ggplot(aes(time, value)) +
+  geom_line(aes(color = species), alpha = 0.5) +
+  theme(legend.position = 'bottom')
+  
 
 ```
 
